@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Neural Vision Studio</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='c.css') }}">
+</head>
+<body>
+    <div class="page-shell">
+        <header class="topbar">
+            <div>
+                <p class="eyebrow">Flask Object Detection</p>
+                <h1>Neural Vision Studio</h1>
+                <p class="subtitle">
+                    Browser camera + image uploads with live boxes, labels, emoji, and Render-ready deployment.
+                </p>
+            </div>
+            <div class="status-cluster">
+                <span class="status-pill">Model {{ model_name }}</span>
+                <span class="status-pill accent">Render Ready</span>
+            </div>
+        </header>
+
+        <main class="main-grid">
+            <section class="workspace-card">
+                <div class="toolbar">
+                    <div class="toolbar-group">
+                        <button id="startCameraBtn" class="primary-btn">Start Camera</button>
+                        <button id="scanBtn" class="secondary-btn">Scan Frame</button>
+                        <button id="liveBtn" class="ghost-btn">Live Detection Off</button>
+                    </div>
+
+                    <div class="toolbar-group">
+                        <label class="upload-btn">
+                            <input id="imageInput" type="file" accept="image/*">
+                            Upload Image
+                        </label>
+                        <div class="slider-wrap">
+                            <label for="confidenceSlider">Confidence</label>
+                            <input id="confidenceSlider" type="range" min="25" max="80" value="35">
+                            <span id="confidenceValue">35%</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="viewer-stage" id="viewerStage">
+                    <video id="cameraFeed" autoplay muted playsinline></video>
+                    <img id="uploadPreview" alt="Uploaded preview">
+                    <canvas id="overlay"></canvas>
+
+                    <div class="empty-state" id="emptyState">
+                        <div class="empty-orb"></div>
+                        <h2>Open your camera or upload an image</h2>
+                        <p>
+                            This version runs in the browser, so it can work locally and on Render without needing server-side webcam access.
+                        </p>
+                    </div>
+
+                    <div class="stage-badge" id="stageBadge">Waiting for input</div>
+                </div>
+            </section>
+
+            <aside class="insight-card">
+                <div class="metric-grid">
+                    <article class="metric-tile">
+                        <span class="metric-label">Mode</span>
+                        <strong id="modeValue">Idle</strong>
+                    </article>
+                    <article class="metric-tile">
+                        <span class="metric-label">Objects</span>
+                        <strong id="countValue">0</strong>
+                    </article>
+                    <article class="metric-tile">
+                        <span class="metric-label">Last Speed</span>
+                        <strong id="speedValue">0 ms</strong>
+                    </article>
+                    <article class="metric-tile">
+                        <span class="metric-label">Model</span>
+                        <strong id="modelValue">{{ model_name }}</strong>
+                    </article>
+                </div>
+
+                <section class="panel">
+                    <div class="panel-head">
+                        <h3>Detected Objects</h3>
+                        <span id="summaryText">Nothing scanned yet</span>
+                    </div>
+                    <div class="object-list" id="objectList">
+                        <p class="placeholder-text">Your detections will appear here with confidence and smart relabel notes.</p>
+                    </div>
+                </section>
+
+                <section class="panel">
+                    <div class="panel-head">
+                        <h3>How To Use</h3>
+                    </div>
+                    <ul class="tips-list">
+                        <li>Use `Start Camera` for browser webcam mode.</li>
+                        <li>Use `Live Detection` for repeated scans every moment.</li>
+                        <li>Upload a photo for a cleaner single-image result.</li>
+                        <li>Increase confidence if you want fewer false labels.</li>
+                    </ul>
+                </section>
+            </aside>
+        </main>
+    </div>
+
+    <script>
+        window.APP_CONFIG = {
+            modelName: "{{ model_name }}"
+        };
+    </script>
+    <script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>
