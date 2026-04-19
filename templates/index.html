@@ -12,101 +12,81 @@
 <body>
     <div class="page-shell">
         <header class="topbar">
-            <div>
+            <div class="title-block">
                 <p class="eyebrow">Flask Object Detection</p>
                 <h1>Neural Vision Studio</h1>
-                <p class="subtitle">
-                    Browser camera + image uploads with live boxes, labels, emoji, and Render-ready deployment.
-                </p>
+                <p class="subtitle">Clean browser camera and image detection with live boxes, labels, and emoji.</p>
             </div>
-            <div class="status-cluster">
-                <span class="status-pill">Model {{ model_name }}</span>
-                <span class="status-pill accent">Render Ready</span>
+            <div class="header-meta">
+                <span class="header-chip">Model {{ model_name }}</span>
             </div>
         </header>
 
-        <main class="main-grid">
-            <section class="workspace-card">
-                <div class="toolbar">
-                    <div class="toolbar-group">
-                        <button id="startCameraBtn" class="primary-btn">Start Camera</button>
-                        <button id="scanBtn" class="secondary-btn">Scan Frame</button>
-                        <button id="liveBtn" class="ghost-btn">Live Detection Off</button>
-                    </div>
+        <section class="control-bar">
+            <div class="control-group">
+                <button id="startCameraBtn" class="primary-btn">Start Camera</button>
+                <button id="scanBtn" class="secondary-btn">Detect Once</button>
+                <button id="liveBtn" class="ghost-btn">Live Detection Off</button>
+                <label class="upload-btn">
+                    <input id="imageInput" type="file" accept="image/*">
+                    Upload Image
+                </label>
+            </div>
 
-                    <div class="toolbar-group">
-                        <label class="upload-btn">
-                            <input id="imageInput" type="file" accept="image/*">
-                            Upload Image
-                        </label>
-                        <div class="slider-wrap">
-                            <label for="confidenceSlider">Confidence</label>
-                            <input id="confidenceSlider" type="range" min="25" max="80" value="35">
-                            <span id="confidenceValue">35%</span>
-                        </div>
-                    </div>
+            <div class="slider-wrap">
+                <label for="confidenceSlider">Confidence</label>
+                <input id="confidenceSlider" type="range" min="25" max="80" value="35">
+                <span id="confidenceValue">35%</span>
+            </div>
+        </section>
+
+        <section class="viewer-card">
+            <div class="viewer-stage" id="viewerStage">
+                <video id="cameraFeed" autoplay muted playsinline></video>
+                <img id="uploadPreview" alt="Uploaded preview">
+                <canvas id="overlay"></canvas>
+
+                <div class="empty-state" id="emptyState">
+                    <div class="empty-orb"></div>
+                    <h2>Open the camera or upload an image</h2>
+                    <p>The preview fills the page, the controls stay minimal, and detections appear only when they matter.</p>
                 </div>
 
-                <div class="viewer-stage" id="viewerStage">
-                    <video id="cameraFeed" autoplay muted playsinline></video>
-                    <img id="uploadPreview" alt="Uploaded preview">
-                    <canvas id="overlay"></canvas>
+                <div class="stage-badge" id="stageBadge">Waiting for input</div>
+            </div>
 
-                    <div class="empty-state" id="emptyState">
-                        <div class="empty-orb"></div>
-                        <h2>Open your camera or upload an image</h2>
-                        <p>
-                            This version runs in the browser, so it can work locally and on Render without needing server-side webcam access.
-                        </p>
-                    </div>
+            <div class="stats-strip">
+                <article class="stat-chip">
+                    <span>Mode</span>
+                    <strong id="modeValue">Idle</strong>
+                </article>
+                <article class="stat-chip">
+                    <span>Objects</span>
+                    <strong id="countValue">0</strong>
+                </article>
+                <article class="stat-chip">
+                    <span>Speed</span>
+                    <strong id="speedValue">0 ms</strong>
+                </article>
+                <article class="stat-chip">
+                    <span>Model</span>
+                    <strong id="modelValue">{{ model_name }}</strong>
+                </article>
+            </div>
+        </section>
 
-                    <div class="stage-badge" id="stageBadge">Waiting for input</div>
+        <section class="result-card">
+            <div class="result-head">
+                <div>
+                    <p class="section-label">Detected Objects</p>
+                    <h2>Current Results</h2>
                 </div>
-            </section>
-
-            <aside class="insight-card">
-                <div class="metric-grid">
-                    <article class="metric-tile">
-                        <span class="metric-label">Mode</span>
-                        <strong id="modeValue">Idle</strong>
-                    </article>
-                    <article class="metric-tile">
-                        <span class="metric-label">Objects</span>
-                        <strong id="countValue">0</strong>
-                    </article>
-                    <article class="metric-tile">
-                        <span class="metric-label">Last Speed</span>
-                        <strong id="speedValue">0 ms</strong>
-                    </article>
-                    <article class="metric-tile">
-                        <span class="metric-label">Model</span>
-                        <strong id="modelValue">{{ model_name }}</strong>
-                    </article>
-                </div>
-
-                <section class="panel">
-                    <div class="panel-head">
-                        <h3>Detected Objects</h3>
-                        <span id="summaryText">Nothing scanned yet</span>
-                    </div>
-                    <div class="object-list" id="objectList">
-                        <p class="placeholder-text">Your detections will appear here with confidence and smart relabel notes.</p>
-                    </div>
-                </section>
-
-                <section class="panel">
-                    <div class="panel-head">
-                        <h3>How To Use</h3>
-                    </div>
-                    <ul class="tips-list">
-                        <li>Use `Start Camera` for browser webcam mode.</li>
-                        <li>Use `Live Detection` for repeated scans every moment.</li>
-                        <li>Upload a photo for a cleaner single-image result.</li>
-                        <li>Increase confidence if you want fewer false labels.</li>
-                    </ul>
-                </section>
-            </aside>
-        </main>
+                <span id="summaryText">Nothing scanned yet</span>
+            </div>
+            <div class="object-list" id="objectList">
+                <p class="placeholder-text">Detected items will show up here with confidence and smart relabel notes.</p>
+            </div>
+        </section>
     </div>
 
     <script>

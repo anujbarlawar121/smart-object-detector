@@ -18,7 +18,7 @@ app.config["MAX_CONTENT_LENGTH"] = MAX_UPLOAD_SIZE
 inference_lock = threading.Lock()
 frame_state_lock = threading.Lock()
 
-latest_gray_frame = None
+previous_live_gray_frame = None
 clahe = cv2.createCLAHE(clipLimit=2.2, tileGridSize=(8, 8))
 
 EMOJI_BY_LABEL = {
@@ -277,7 +277,7 @@ def decode_data_url(image_data_url):
 
 
 def detect_objects(frame, threshold, mode):
-    global latest_gray_frame
+    global previous_live_gray_frame
 
     started_at = time.perf_counter()
     frame_height, frame_width = frame.shape[:2]
@@ -285,8 +285,16 @@ def detect_objects(frame, threshold, mode):
     gray = cv2.cvtColor(detection_frame, cv2.COLOR_BGR2GRAY)
 
     with frame_state_lock:
-        frame_delta = cv2.absdiff(gray, latest_gray_frame) if latest_gray_frame is not None else None
-        latest_gray_frame = gray
+        frame_delta = None
+
+        if mode == "live":
+            if previous_live_gray_frame is not None and previous_live_gray_frame.shape == gray.shape:
+                frame_delta = cv2.absdiff(gray, previous_live_gray_frame)
+
+            previous_live_gray_frame = gray
+        else:
+            # Uploaded images should not reuse motion state from earlier live-camera frames.
+            previous_live_gray_frame = None
 
     confidence = min(max(threshold, 0.15), 0.85)
     image_size = 960 if mode == "live" else 1280

@@ -28,6 +28,7 @@ let currentMode = "idle";
 let currentPayload = null;
 let currentUploadUrl = null;
 let activeSourceType = "empty";
+let lastUploadFile = null;
 
 function setStatus(text) {
     stageBadge.textContent = text;
@@ -59,6 +60,7 @@ function showSource(type) {
     emptyState.style.display = type === "empty" ? "flex" : "none";
     currentPayload = null;
     drawDetections(currentPayload);
+    renderObjectList(null);
 }
 
 function getActiveMediaElement() {
@@ -297,6 +299,8 @@ async function handleUpload(file) {
         return;
     }
 
+    lastUploadFile = file;
+
     if (currentUploadUrl) {
         URL.revokeObjectURL(currentUploadUrl);
     }
@@ -368,6 +372,11 @@ startCameraBtn.addEventListener("click", async () => {
 
 scanBtn.addEventListener("click", async () => {
     try {
+        if (activeSourceType === "upload" && lastUploadFile) {
+            await handleUpload(lastUploadFile);
+            return;
+        }
+
         if (activeSourceType === "upload") {
             imageInput.click();
             return;
