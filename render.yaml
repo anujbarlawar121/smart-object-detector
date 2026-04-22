@@ -3,10 +3,10 @@ services:
     name: neural-vision-studio
     runtime: python
     plan: free
-    buildCommand: pip install -r requirements.txt && python -c "from ultralytics import YOLO; YOLO('yolov8n.pt')"
+    buildCommand: pip install -r requirements.txt
     startCommand: gunicorn app:app --workers 1 --threads 4 --timeout 180
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.9
-      - key: YOLO_MODEL
-        value: yolov8n.pt
+      - key: DETECTOR_NAME
+        value: coco-ssd (browser)

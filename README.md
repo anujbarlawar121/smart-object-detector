@@ -1,14 +1,14 @@
 # Neural Vision Studio
 
-Neural Vision Studio is a Flask-based object detection app built for the browser.
+Neural Vision Studio is a Flask app that serves a browser-based object detector.
 
 ## Features
 
-- Browser camera detection using `getUserMedia`
+- Fast live detection in the browser with `coco-ssd`
+- Camera mode with front/back camera flip for phones
 - Image upload detection for still images
 - Bounding boxes, labels, confidence, and emoji overlays
-- Smart relabeling for common indoor mistakes like `ceiling fan` and `bottle`
-- Render-ready deployment config with `render.yaml`
+- Lightweight Render deployment with no server-side YOLO model loading
 
 ## Local Run
 
@@ -30,4 +30,4 @@ This repo includes a Blueprint file for Render.
 3. Select this repository.
 4. Render will use `render.yaml` automatically.
 
-The deployed app uses browser camera access, so it works online without trying to use the server machine's webcam.
+The live object detection now runs inside the browser, which makes it much faster and avoids server-side inference delays.

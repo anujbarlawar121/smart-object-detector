@@ -17,18 +17,103 @@ const scanBtn = document.getElementById("scanBtn");
 const liveBtn = document.getElementById("liveBtn");
 const imageInput = document.getElementById("imageInput");
 
-const captureCanvas = document.createElement("canvas");
-const captureContext = captureCanvas.getContext("2d");
+const EMOJI_BY_LABEL = {
+    "ceiling fan": "🪭",
+    person: "🧍",
+    bicycle: "🚲",
+    car: "🚗",
+    motorcycle: "🏍️",
+    airplane: "✈️",
+    bus: "🚌",
+    train: "🚆",
+    truck: "🚚",
+    boat: "🚤",
+    bird: "🐦",
+    cat: "🐱",
+    dog: "🐶",
+    horse: "🐴",
+    sheep: "🐑",
+    cow: "🐮",
+    elephant: "🐘",
+    bear: "🐻",
+    zebra: "🦓",
+    giraffe: "🦒",
+    backpack: "🎒",
+    umbrella: "☂️",
+    handbag: "👜",
+    tie: "👔",
+    suitcase: "🧳",
+    frisbee: "🥏",
+    skis: "🎿",
+    snowboard: "🏂",
+    "sports ball": "⚽",
+    kite: "🪁",
+    skateboard: "🛹",
+    surfboard: "🏄",
+    bottle: "🍾",
+    cup: "☕",
+    fork: "🍴",
+    knife: "🔪",
+    spoon: "🥄",
+    bowl: "🥣",
+    banana: "🍌",
+    apple: "🍎",
+    sandwich: "🥪",
+    orange: "🍊",
+    broccoli: "🥦",
+    carrot: "🥕",
+    pizza: "🍕",
+    donut: "🍩",
+    cake: "🍰",
+    chair: "🪑",
+    couch: "🛋️",
+    "potted plant": "🪴",
+    bed: "🛏️",
+    toilet: "🚽",
+    tv: "📺",
+    laptop: "💻",
+    mouse: "🖱️",
+    remote: "🎮",
+    keyboard: "⌨️",
+    "cell phone": "📱",
+    microwave: "🍽️",
+    oven: "♨️",
+    toaster: "🍞",
+    sink: "🚰",
+    refrigerator: "🧊",
+    book: "📚",
+    clock: "🕒",
+    vase: "🏺",
+    scissors: "✂️",
+    "teddy bear": "🧸",
+    toothbrush: "🪥"
+};
 
+const CAMERA_WIDTH = 480;
+const CAMERA_HEIGHT = 360;
+const LIVE_DETECTION_INTERVAL_MS = 90;
+const SCORE_THRESHOLD = 0.4;
+const MAX_BOXES = 8;
+const LIVE_MAX_DIMENSION = 320;
+const UPLOAD_MAX_DIMENSION = 960;
+
+let detector = null;
+let detectorPromise = null;
 let stream = null;
 let liveDetectionEnabled = false;
-let liveLoopPromise = null;
 let currentPayload = null;
 let currentUploadUrl = null;
 let activeSourceType = "empty";
 let lastUploadFile = null;
 let currentFacingMode = "environment";
 let detectionInFlight = false;
+let liveAnimationFrame = null;
+let lastLiveDetectionAt = 0;
+const detectionCanvas = document.createElement("canvas");
+const detectionCtx = detectionCanvas.getContext("2d", {
+    alpha: false,
+    desynchronized: true
+});
 
 function setStatus(text) {
     stageBadge.textContent = text;
@@ -39,9 +124,27 @@ function setMode(mode) {
 }
 
 function setButtonsBusy(isBusy) {
-    scanBtn.disabled = isBusy;
     startCameraBtn.disabled = isBusy;
     flipCameraBtn.disabled = isBusy;
+    scanBtn.disabled = isBusy;
+}
+
+function getLabelEmoji(label) {
+    return EMOJI_BY_LABEL[label] || "📦";
+}
+
+function getSourceDimensions(sourceElement) {
+    if (sourceElement === video) {
+        return {
+            width: video.videoWidth,
+            height: video.videoHeight
+        };
+    }
+
+    return {
+        width: sourceElement.naturalWidth,
+        height: sourceElement.naturalHeight
+    };
 }
 
 function resizeCanvas() {
@@ -147,11 +250,6 @@ function drawDetections(payload) {
         return;
     }
 
-    const media = getActiveMediaElement();
-    if (!media) {
-        return;
-    }
-
     const transform = getContainTransform(
         payload.frame_width,
         payload.frame_height,
@@ -175,7 +273,7 @@ function drawDetections(payload) {
         ctx.strokeStyle = color;
         ctx.lineWidth = 3;
         ctx.shadowColor = color;
-        ctx.shadowBlur = 18;
+        ctx.shadowBlur = 14;
         ctx.strokeRect(left, top, width, height);
 
         ctx.shadowBlur = 0;
@@ -185,7 +283,7 @@ function drawDetections(payload) {
 
 function renderObjectList(payload) {
     if (!payload || !payload.items || payload.items.length === 0) {
-        objectList.innerHTML = '<p class="placeholder-text">No confident detections yet. Try brighter light, move closer to the object, or use the rear camera for sharper results.</p>';
+        objectList.innerHTML = '<p class="placeholder-text">No object found yet. Try bringing the object closer, using better light, or switching to the back camera.</p>';
         summaryText.textContent = "No objects found";
         countValue.textContent = "0";
         speedValue.textContent = payload ? `${payload.processing_ms} ms` : "0 ms";
@@ -196,23 +294,17 @@ function renderObjectList(payload) {
     summaryText.textContent = `${payload.object_count} object${payload.object_count === 1 ? "" : "s"} detected`;
     countValue.textContent = String(payload.object_count);
     speedValue.textContent = `${payload.processing_ms} ms`;
-    modelValue.textContent = payload.model_name;
+    modelValue.textContent = window.APP_CONFIG.modelName;
 
-    objectList.innerHTML = payload.items.map((item) => {
-        const note = item.source_label !== item.label
-            ? `Smart relabel from ${item.source_label}`
-            : "Direct model label";
-
-        return `
-            <article class="object-item">
-                <div class="object-main">
-                    <strong>${item.emoji} ${item.label}</strong>
-                    <small>${note}</small>
-                </div>
-                <span class="object-confidence">${Math.round(item.confidence * 100)}%</span>
-            </article>
-        `;
-    }).join("");
+    objectList.innerHTML = payload.items.map((item) => `
+        <article class="object-item">
+            <div class="object-main">
+                <strong>${item.emoji} ${item.label}</strong>
+                <small>${item.description}</small>
+            </div>
+            <span class="object-confidence">${Math.round(item.confidence * 100)}%</span>
+        </article>
+    `).join("");
 }
 
 function updateUiFromPayload(payload) {
@@ -221,6 +313,43 @@ function updateUiFromPayload(payload) {
     setStatus(`Detected ${payload.object_count} object${payload.object_count === 1 ? "" : "s"} in ${payload.processing_ms} ms`);
     renderObjectList(payload);
     drawDetections(payload);
+}
+
+async function ensureDetector() {
+    if (detector) {
+        return detector;
+    }
+
+    if (!detectorPromise) {
+        detectorPromise = (async () => {
+            setButtonsBusy(true);
+            setStatus("Loading browser detector...");
+
+            try {
+                await tf.ready();
+
+                try {
+                    await tf.setBackend("webgl");
+                    await tf.ready();
+                } catch (_error) {
+                    await tf.setBackend("cpu");
+                    await tf.ready();
+                }
+
+                detector = await cocoSsd.load({
+                    base: "lite_mobilenet_v2"
+                });
+
+                modelValue.textContent = window.APP_CONFIG.modelName;
+                setStatus("Detector ready");
+                return detector;
+            } finally {
+                setButtonsBusy(false);
+            }
+        })();
+    }
+
+    return detectorPromise;
 }
 
 function stopCameraStream() {
@@ -237,23 +366,26 @@ async function requestCameraStream() {
         {
             video: {
                 facingMode: { exact: currentFacingMode },
-                width: { ideal: 960 },
-                height: { ideal: 540 }
+                width: { ideal: CAMERA_WIDTH },
+                height: { ideal: CAMERA_HEIGHT },
+                frameRate: { ideal: 24, max: 24 }
             },
             audio: false
         },
         {
             video: {
                 facingMode: currentFacingMode,
-                width: { ideal: 960 },
-                height: { ideal: 540 }
+                width: { ideal: CAMERA_WIDTH },
+                height: { ideal: CAMERA_HEIGHT },
+                frameRate: { ideal: 24, max: 24 }
             },
             audio: false
         },
         {
             video: {
-                width: { ideal: 960 },
-                height: { ideal: 540 }
+                width: { ideal: CAMERA_WIDTH },
+                height: { ideal: CAMERA_HEIGHT },
+                frameRate: { ideal: 24, max: 24 }
             },
             audio: false
         }
@@ -277,6 +409,8 @@ async function startCamera(forceRestart = false) {
         setStatus("Camera is not supported in this browser");
         return false;
     }
+
+    await ensureDetector();
 
     if (stream && !forceRestart) {
         showSource("camera");
@@ -304,60 +438,134 @@ async function startCamera(forceRestart = false) {
     }
 }
 
-function captureFrameBlob() {
-    return new Promise((resolve) => {
-        const sourceWidth = video.videoWidth;
-        const sourceHeight = video.videoHeight;
-        const maxWidth = 960;
-        const scale = Math.min(1, maxWidth / Math.max(sourceWidth, 1));
-        const width = Math.max(1, Math.round(sourceWidth * scale));
-        const height = Math.max(1, Math.round(sourceHeight * scale));
+function normalizePrediction(prediction, frameWidth, frameHeight) {
+    const [x, y, width, height] = prediction.bbox;
+    let label = prediction.class;
 
-        captureCanvas.width = width;
-        captureCanvas.height = height;
-        captureContext.drawImage(video, 0, 0, width, height);
+    const centerX = x + (width / 2);
+    const centerY = y + (height / 2);
+    const centerOffsetX = Math.abs(centerX - (frameWidth / 2)) / frameWidth;
 
-        captureCanvas.toBlob((blob) => {
-            resolve(blob);
-        }, "image/jpeg", 0.78);
-    });
+    if (
+        ["sports ball", "frisbee", "clock"].includes(label)
+        && centerY < frameHeight * 0.35
+        && centerOffsetX < 0.28
+        && width < frameWidth * 0.25
+        && height < frameHeight * 0.25
+    ) {
+        label = "ceiling fan";
+    }
+
+    if (
+        ["cup", "vase", "wine glass"].includes(label)
+        && height > width * 1.35
+        && centerY > frameHeight * 0.45
+    ) {
+        label = "bottle";
+    }
+
+    return {
+        label,
+        emoji: getLabelEmoji(label),
+        confidence: prediction.score,
+        description: label === prediction.class
+            ? "Detected directly in the browser"
+            : `Smart relabel from ${prediction.class}`,
+        x1: Math.max(0, Math.round(x)),
+        y1: Math.max(0, Math.round(y)),
+        x2: Math.min(frameWidth, Math.round(x + width)),
+        y2: Math.min(frameHeight, Math.round(y + height))
+    };
 }
 
-async function parseResponsePayload(response) {
-    const rawText = await response.text();
-    let payload = null;
+function prepareDetectionSource(sourceElement, maxDimension) {
+    const { width: sourceWidth, height: sourceHeight } = getSourceDimensions(sourceElement);
 
-    if (rawText) {
-        try {
-            payload = JSON.parse(rawText);
-        } catch (error) {
-            throw new Error(`Server returned invalid response (${response.status})`);
-        }
+    if (!sourceWidth || !sourceHeight) {
+        return null;
     }
 
-    if (!response.ok) {
-        const message = payload && payload.error
-            ? payload.error
-            : rawText || `Request failed (${response.status})`;
-        throw new Error(message);
+    const scale = Math.min(1, maxDimension / Math.max(sourceWidth, sourceHeight));
+    const targetWidth = Math.max(1, Math.round(sourceWidth * scale));
+    const targetHeight = Math.max(1, Math.round(sourceHeight * scale));
+
+    if (detectionCanvas.width !== targetWidth || detectionCanvas.height !== targetHeight) {
+        detectionCanvas.width = targetWidth;
+        detectionCanvas.height = targetHeight;
     }
 
-    if (!payload) {
-        throw new Error("Server returned an empty response");
+    detectionCtx.imageSmoothingEnabled = true;
+    detectionCtx.clearRect(0, 0, targetWidth, targetHeight);
+    detectionCtx.drawImage(sourceElement, 0, 0, targetWidth, targetHeight);
+
+    return {
+        canvas: detectionCanvas,
+        sourceWidth,
+        sourceHeight,
+        scaleX: sourceWidth / targetWidth,
+        scaleY: sourceHeight / targetHeight
+    };
+}
+
+async function runDetection(sourceElement, mode) {
+    if (detectionInFlight) {
+        return null;
     }
 
-    if (!payload.ok) {
-        throw new Error(payload.error || "Detection failed");
+    const preparedSource = prepareDetectionSource(
+        sourceElement,
+        mode === "live" ? LIVE_MAX_DIMENSION : UPLOAD_MAX_DIMENSION
+    );
+
+    if (!preparedSource) {
+        return null;
     }
 
-    return payload;
+    detectionInFlight = true;
+    const startedAt = performance.now();
+
+    try {
+        const activeDetector = await ensureDetector();
+        const predictions = await activeDetector.detect(
+            preparedSource.canvas,
+            MAX_BOXES,
+            SCORE_THRESHOLD
+        );
+        const items = predictions
+            .map((prediction) => {
+                const [x, y, width, height] = prediction.bbox;
+
+                return normalizePrediction(
+                    {
+                        ...prediction,
+                        bbox: [
+                            x * preparedSource.scaleX,
+                            y * preparedSource.scaleY,
+                            width * preparedSource.scaleX,
+                            height * preparedSource.scaleY
+                        ]
+                    },
+                    preparedSource.sourceWidth,
+                    preparedSource.sourceHeight
+                );
+            })
+            .filter((item) => item.x2 > item.x1 && item.y2 > item.y1);
+
+        return {
+            ok: true,
+            frame_width: preparedSource.sourceWidth,
+            frame_height: preparedSource.sourceHeight,
+            items,
+            object_count: items.length,
+            processing_ms: Math.round(performance.now() - startedAt),
+            mode
+        };
+    } finally {
+        detectionInFlight = false;
+    }
 }
 
 async function detectCurrentCameraFrame() {
-    if (detectionInFlight) {
-        return;
-    }
-
     if (!stream || video.videoWidth === 0 || video.videoHeight === 0) {
         const started = await startCamera();
         if (!started) {
@@ -365,37 +573,18 @@ async function detectCurrentCameraFrame() {
         }
     }
 
-    const blob = await captureFrameBlob();
-    if (!blob) {
-        throw new Error("Unable to capture the current frame");
-    }
-
-    const formData = new FormData();
-    formData.append("image", blob, "camera.jpg");
-
-    detectionInFlight = true;
-    setButtonsBusy(true);
-    setStatus("Analyzing current frame...");
-
-    try {
-        const response = await fetch("/detect-frame", {
-            method: "POST",
-            body: formData
-        });
-
-        const payload = await parseResponsePayload(response);
+    const payload = await runDetection(video, "live");
+    if (payload) {
         updateUiFromPayload(payload);
-    } finally {
-        detectionInFlight = false;
-        setButtonsBusy(false);
     }
 }
 
 async function handleUpload(file) {
-    if (!file || detectionInFlight) {
+    if (!file) {
         return;
     }
 
+    await ensureDetector();
     lastUploadFile = file;
 
     if (currentUploadUrl) {
@@ -413,23 +602,9 @@ async function handleUpload(file) {
     setMode("Uploaded Image");
     setStatus("Analyzing uploaded image...");
 
-    const formData = new FormData();
-    formData.append("image", file);
-
-    detectionInFlight = true;
-    setButtonsBusy(true);
-
-    try {
-        const response = await fetch("/detect-upload", {
-            method: "POST",
-            body: formData
-        });
-
-        const payload = await parseResponsePayload(response);
+    const payload = await runDetection(uploadPreview, "upload");
+    if (payload) {
         updateUiFromPayload(payload);
-    } finally {
-        detectionInFlight = false;
-        setButtonsBusy(false);
     }
 }
 
@@ -438,32 +613,38 @@ function setLiveUiState() {
     liveBtn.textContent = liveDetectionEnabled ? "Live Detection On" : "Live Detection Off";
 }
 
-async function startLiveLoop() {
-    if (liveLoopPromise) {
-        return liveLoopPromise;
+function stopLiveLoop() {
+    if (liveAnimationFrame) {
+        cancelAnimationFrame(liveAnimationFrame);
+        liveAnimationFrame = null;
+    }
+}
+
+function liveLoop() {
+    if (!liveDetectionEnabled) {
+        stopLiveLoop();
+        return;
     }
 
-    liveLoopPromise = (async () => {
-        while (liveDetectionEnabled) {
-            try {
-                await detectCurrentCameraFrame();
-            } catch (error) {
-                setStatus(error.message);
-                console.error(error);
-                liveDetectionEnabled = false;
-            }
+    const now = performance.now();
 
+    if (!detectionInFlight && now - lastLiveDetectionAt >= LIVE_DETECTION_INTERVAL_MS) {
+        lastLiveDetectionAt = now;
+        detectCurrentCameraFrame().catch((error) => {
+            setStatus(error.message || "Detection failed");
+            console.error(error);
+            liveDetectionEnabled = false;
             setLiveUiState();
+        });
+    }
 
-            if (liveDetectionEnabled) {
-                await new Promise((resolve) => setTimeout(resolve, 650));
-            }
-        }
+    liveAnimationFrame = requestAnimationFrame(liveLoop);
+}
 
-        liveLoopPromise = null;
-    })();
-
-    return liveLoopPromise;
+function startLiveLoop() {
+    stopLiveLoop();
+    lastLiveDetectionAt = 0;
+    liveAnimationFrame = requestAnimationFrame(liveLoop);
 }
 
 startCameraBtn.addEventListener("click", async () => {
@@ -480,7 +661,7 @@ flipCameraBtn.addEventListener("click", async () => {
         liveDetectionEnabled = true;
         setLiveUiState();
         setStatus("Live detection resumed after camera flip");
-        await startLiveLoop();
+        startLiveLoop();
     }
 });
 
@@ -498,7 +679,7 @@ scanBtn.addEventListener("click", async () => {
 
         await detectCurrentCameraFrame();
     } catch (error) {
-        setStatus(error.message);
+        setStatus(error.message || "Detection failed");
         console.error(error);
     }
 });
@@ -516,9 +697,10 @@ liveBtn.addEventListener("click", async () => {
 
     if (liveDetectionEnabled) {
         setStatus("Live detection started");
-        await startLiveLoop();
+        startLiveLoop();
     } else {
         setStatus("Live detection paused");
+        stopLiveLoop();
     }
 });
 
@@ -528,9 +710,10 @@ imageInput.addEventListener("change", async (event) => {
     try {
         liveDetectionEnabled = false;
         setLiveUiState();
+        stopLiveLoop();
         await handleUpload(file);
     } catch (error) {
-        setStatus(error.message);
+        setStatus(error.message || "Upload detection failed");
         console.error(error);
     } finally {
         imageInput.value = "";
