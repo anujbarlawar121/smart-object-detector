@@ -25,6 +25,7 @@
         <section class="control-bar">
             <div class="control-group">
                 <button id="startCameraBtn" class="primary-btn">Start Camera</button>
+                <button id="flipCameraBtn" class="secondary-btn">Flip Camera</button>
                 <button id="scanBtn" class="secondary-btn">Detect Once</button>
                 <button id="liveBtn" class="ghost-btn">Live Detection Off</button>
                 <label class="upload-btn">
@@ -33,11 +34,7 @@
                 </label>
             </div>
 
-            <div class="slider-wrap">
-                <label for="confidenceSlider">Confidence</label>
-                <input id="confidenceSlider" type="range" min="25" max="80" value="35">
-                <span id="confidenceValue">35%</span>
-            </div>
+            <div class="control-note">Auto-tuned for fast and stable detection</div>
         </section>
 
         <section class="viewer-card">

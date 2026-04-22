@@ -142,6 +142,13 @@ button:hover,
     transform: translateY(-1px);
 }
 
+button:disabled,
+.upload-btn.disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+    transform: none;
+}
+
 .primary-btn {
     background: linear-gradient(135deg, var(--accent), var(--accent-strong));
     color: #051017;
@@ -165,25 +172,13 @@ button:hover,
     display: none;
 }
 
-.slider-wrap {
-    display: inline-flex;
-    align-items: center;
-    gap: 12px;
+.control-note {
     padding: 10px 14px;
     border-radius: 999px;
     border: 1px solid var(--line);
     background: rgba(255, 255, 255, 0.03);
-}
-
-.slider-wrap label,
-.slider-wrap span {
     color: var(--muted);
     font-size: 0.9rem;
-}
-
-.slider-wrap input {
-    width: 180px;
-    accent-color: var(--accent-strong);
 }
 
 .viewer-card {
@@ -376,17 +371,8 @@ button:hover,
     }
 
     .control-group,
-    .slider-wrap {
+    .control-note {
         width: 100%;
-    }
-
-    .slider-wrap {
-        justify-content: space-between;
-    }
-
-    .slider-wrap input {
-        flex: 1;
-        min-width: 0;
     }
 
     .viewer-stage {

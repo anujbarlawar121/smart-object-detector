@@ -11,6 +11,10 @@ from ultralytics import YOLO
 
 BASE_DIR = Path(__file__).resolve().parent
 MAX_UPLOAD_SIZE = 10 * 1024 * 1024
+LIVE_DEFAULT_CONFIDENCE = 0.25
+UPLOAD_DEFAULT_CONFIDENCE = 0.22
+LIVE_IMAGE_SIZE = 640
+UPLOAD_IMAGE_SIZE = 960
 
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = MAX_UPLOAD_SIZE
@@ -145,7 +149,17 @@ def get_label_emoji(label):
     return EMOJI_BY_LABEL.get(label, "📦")
 
 
-def enhance_for_detection(frame):
+def enhance_for_detection(frame, mode):
+    if mode == "live":
+        brightness = float(frame.mean())
+
+        if brightness < 85:
+            return cv2.convertScaleAbs(frame, alpha=1.16, beta=12)
+        if brightness < 115:
+            return cv2.convertScaleAbs(frame, alpha=1.08, beta=8)
+
+        return frame
+
     lab = cv2.cvtColor(frame, cv2.COLOR_BGR2LAB)
     l_channel, a_channel, b_channel = cv2.split(lab)
     l_channel = clahe.apply(l_channel)
@@ -276,12 +290,24 @@ def decode_data_url(image_data_url):
     return read_image_bytes(image_bytes)
 
 
+def get_requested_confidence(raw_value, mode):
+    default_value = LIVE_DEFAULT_CONFIDENCE if mode == "live" else UPLOAD_DEFAULT_CONFIDENCE
+
+    if raw_value in (None, ""):
+        return default_value
+
+    try:
+        return min(max(float(raw_value), 0.15), 0.85)
+    except (TypeError, ValueError):
+        return default_value
+
+
 def detect_objects(frame, threshold, mode):
     global previous_live_gray_frame
 
     started_at = time.perf_counter()
     frame_height, frame_width = frame.shape[:2]
-    detection_frame = enhance_for_detection(frame)
+    detection_frame = enhance_for_detection(frame, mode)
     gray = cv2.cvtColor(detection_frame, cv2.COLOR_BGR2GRAY)
 
     with frame_state_lock:
@@ -296,8 +322,8 @@ def detect_objects(frame, threshold, mode):
             # Uploaded images should not reuse motion state from earlier live-camera frames.
             previous_live_gray_frame = None
 
-    confidence = min(max(threshold, 0.15), 0.85)
-    image_size = 960 if mode == "live" else 1280
+    confidence = get_requested_confidence(threshold, mode)
+    image_size = LIVE_IMAGE_SIZE if mode == "live" else UPLOAD_IMAGE_SIZE
 
     with inference_lock:
         results = model(
@@ -391,14 +417,23 @@ def health():
     return jsonify({"ok": True, "model_name": Path(MODEL_NAME).name})
 
 
+@app.errorhandler(413)
+def file_too_large(_error):
+    return jsonify({"ok": False, "error": "Image is too large. Please use a file under 10 MB."}), 413
+
+
 @app.route("/detect-frame", methods=["POST"])
 def detect_frame():
-    payload = request.get_json(silent=True) or {}
-    image_data_url = payload.get("image")
-    threshold = float(payload.get("confidence", 0.35))
+    uploaded_file = request.files.get("image")
 
     try:
-        frame = decode_data_url(image_data_url)
+        if uploaded_file is not None and uploaded_file.filename:
+            frame = read_image_bytes(uploaded_file.read())
+            threshold = request.form.get("confidence")
+        else:
+            payload = request.get_json(silent=True) or {}
+            frame = decode_data_url(payload.get("image"))
+            threshold = payload.get("confidence")
     except (ValueError, TypeError, base64.binascii.Error) as exc:
         return jsonify({"ok": False, "error": str(exc)}), 400
 
@@ -411,7 +446,7 @@ def detect_frame():
 @app.route("/detect-upload", methods=["POST"])
 def detect_upload():
     uploaded_file = request.files.get("image")
-    threshold = float(request.form.get("confidence", 0.35))
+    threshold = request.form.get("confidence")
 
     if uploaded_file is None or not uploaded_file.filename:
         return jsonify({"ok": False, "error": "Please choose an image file."}), 400
