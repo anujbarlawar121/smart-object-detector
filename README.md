@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="smart-object-detector-banner.svg" width="100%" alt="Smart Object Detector Banner">
+  <img src="smart_object_detector_banner.svg" width="100%" alt="Smart Object Detector Banner">
 </p>
 
 # Neural Vision Studio
