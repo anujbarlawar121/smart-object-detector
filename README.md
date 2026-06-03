@@ -2,6 +2,7 @@
   <img src="smart_object_detector_banner.svg" width="100%" alt="Smart Object Detector Banner">
 </p>
 
+
 # Neural Vision Studio
 
 Neural Vision Studio is a Flask app that serves a browser-based object detector.
